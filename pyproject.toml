@@ -1,0 +1,47 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+exclude = [
+    ".venv",
+    "venv",
+    "node_modules",
+    "training/checkpoints",
+    # Archived, deliberately unmaintained. See the NOTE.md in each.
+    "training/data/superseded",
+    "evaluation/results",
+    "evaluation/results_dev",
+]
+
+[tool.ruff.lint]
+# E/F/W/B catch defects. `I` (import sorting) and `UP` (modernisation) are
+# deliberately off: enabling them rewrites every import block in the repo for no
+# behavioural gain, which buries real findings in reformatting noise.
+select = ["E", "F", "W", "B"]
+ignore = [
+    "E501",  # line length is a formatter concern
+    "B008",  # FastAPI's Depends() in a default argument is the documented pattern
+    "E731",  # short lambdas read better than def for one-line statistics
+    "E741",  # `l` for "line" is clear enough in the contexts it appears
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Runners must import `app.*` after add_backend_to_path() has run, and
+# evaluation/prompts.py re-exports from the backend for the same reason.
+"evaluation/runners/*.py" = ["E402"]
+"evaluation/prompts.py" = ["E402"]
+# Alembic's generated env.py sets up sys.path before importing app models.
+"backend/app/db/migrations/env.py" = ["E402"]
+# local_model.py probes for torch/transformers by importing them.
+"backend/app/llm_engine/local_model.py" = ["F401"]
+# Tests favour short lambdas for one-line statistics.
+"evaluation/tests/*.py" = ["E731"]
+
+[tool.pytest.ini_options]
+# Two suites with different import roots; each is run from its own directory.
+# See the `test` target in the Makefile.
+testpaths = ["evaluation/tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:pydantic.*",
+    "ignore::UserWarning:pydantic.*",
+]

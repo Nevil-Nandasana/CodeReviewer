@@ -1,0 +1,150 @@
+# `version:` is obsolete in Compose v2 and only produces a warning; removed.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cr-postgres
+    environment:
+      POSTGRES_DB: codereviewai
+      POSTGRES_USER: cruser
+      POSTGRES_PASSWORD: crpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # 5433 on the host so it does not collide with a local Postgres.
+      # Inside the network the port is still 5432 — see DATABASE_URL below.
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cruser -d codereviewai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: cr-redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cr-backend
+    env_file: ./backend/.env
+    # `environment` wins over `env_file`, which is the point of these four.
+    # backend/.env is written for running on the host, where Postgres is
+    # localhost:5433 and Redis is localhost:6379. Inside the compose network
+    # those are the service names on their real ports, so without these
+    # overrides every container fails to reach the database it depends on.
+    environment:
+      DATABASE_URL: postgresql://cruser:crpassword@postgres:5432/codereviewai
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      # This already exposes backend/github_private_key.pem at /app inside the
+      # container. Mounting the .pem separately, as this file used to, silently
+      # creates a *directory* of that name when the key is absent, and the
+      # GitHub client then fails with a confusing IsADirectoryError.
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cr-celery
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://cruser:crpassword@postgres:5432/codereviewai
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      # The worker is what loads a local model, so it needs the adapters.
+      # Read-only: nothing at serving time should write into a training run.
+      - ./training/checkpoints:/training/checkpoints:ro
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=1
+    restart: unless-stopped
+    # MODEL_BACKEND=local needs a GPU here. The reservation is commented out
+    # because an uncommented `devices: [driver: nvidia]` makes `docker compose
+    # up` fail outright on any host without the NVIDIA container toolkit, which
+    # includes every machine running with MODEL_BACKEND=openai. Uncomment when
+    # you actually serve a local model.
+    #
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cr-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: cr-prometheus
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: cr-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:

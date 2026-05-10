@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+
+# Model files (too large for git — use git-lfs or separate storage)
+models/
+!/backend/app/models/
+training/checkpoints/
+training/data/train.jsonl
+training/data/val.jsonl
+training/data/test.jsonl
+training/data/train_small.jsonl
+training/*.log
+
+# Evaluation artefacts.
+# results/*.jsonl and report.md ARE committed — they are the evidence behind the
+# numbers in the README, and `evaluation.score` can regenerate the report from
+# them without re-running a model. Only the raw run logs are excluded.
+evaluation/*.log
+evaluation/results_dev/
+
+# Secrets
+*.pem
+github_private_key.pem
+.env
+backend/.env
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+vscode-extension/dist/
+vscode-extension/out/
+*.vsix
+
+# Docker
+.dockerenv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Database
+*.db
+*.sqlite3
+
+# TensorBoard
+runs/
+
+# Misc
+*.bak
+*.tmp
