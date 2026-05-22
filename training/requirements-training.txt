@@ -1,0 +1,22 @@
+# Training-specific dependencies (separate from backend).
+#   pip install -r training/requirements-training.txt
+#
+# Install torch first, matched to your CUDA runtime. The verified combination
+# on the development machine (RTX 4060 Laptop, 8.6GB, CUDA 11.8) is:
+#   pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu118
+#
+# Lower bounds rather than exact pins. The previous version pinned
+# transformers==4.41.2, which predates torch 2.7 and cannot be installed
+# alongside it; the pins described an environment that no longer resolves.
+# These floors are the versions the training and evaluation runs were actually
+# executed against.
+
+transformers>=4.41,<6          # verified on 5.5.4
+peft>=0.11                     # verified on 0.20.0
+bitsandbytes>=0.43             # verified on 0.50.0 (has Windows wheels)
+accelerate>=0.30               # verified on 1.14.0
+tensorboard>=2.16
+
+# train.py deliberately uses plain transformers.Trainer rather than TRL's
+# SFTTrainer — see its module docstring — so `trl` is not required.
+# It also reads JSONL directly, so `datasets` is not required.
